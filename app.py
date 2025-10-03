@@ -73,6 +73,9 @@ def pdf2html(p: Payload):
             if b.get("type",0)!=0: continue
             for ln in b.get("lines", []):
                 for sp in ln.get("spans", []):
+                    txt = nfkc(sp.get("text", ""))
+                    if not txt:
+                        continue
                     txt = nfkc(sp.get("text","")); if not txt: continue
                     all_text.append(txt)
                     col = sp.get("color",(0,0,0))
@@ -97,6 +100,8 @@ def pdf2html(p: Payload):
                 for row in t:
                     out.write("<tr>"+"".join(f"<td>{(c or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')}</td>" for c in row)+"</tr>")
                 out.write("</table>")
+        out.write("</article>")
+        return out.getvalue()
         out.write("</article>"); return out.getvalue()
 
     def build_fidelity(pages):
@@ -109,6 +114,8 @@ def pdf2html(p: Payload):
                 t=s["text"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
                 out.write(f'<span style="{style}">{t}</span>')
             out.write("</section>")
+        out.write("</div>")
+        return out.getvalue()
         out.write("</div>"); return out.getvalue()
 
     html_sem = build_semantic(pages)
