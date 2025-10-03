@@ -42,6 +42,7 @@ def pdf2html(p: Payload):
         elif p.pdf_url:
             r = requests.get(p.pdf_url, timeout=60)
             r.raise_for_status()
+            r = requests.get(p.pdf_url, timeout=60); r.raise_for_status()
             pdf_bytes = r.content
         else:
             raise HTTPException(400, "Provide 'pdf_b64' or 'pdf_url'")
@@ -84,6 +85,12 @@ def pdf2html(p: Payload):
                         g = int(round(col[1] * 255))
                         b = int(round(col[2] * 255))
                         color = f"#{r:02X}{g:02X}{b:02X}"
+                    txt = nfkc(sp.get("text","")); if not txt: continue
+                    all_text.append(txt)
+                    col = sp.get("color",(0,0,0))
+                    if isinstance(col,(list,tuple)):
+                        r=int(round(col[0]*255)); g=int(round(col[1]*255)); b=int(round(col[2]*255))
+                        color=f"#{r:02X}{g:02X}{b:02X}"
                     else: color="#000000"
                     x0,y0,x1,y1 = sp.get("bbox",[0,0,0,0])
                     spans.append({"text":txt,"font":sp.get("font",""),"size":float(sp.get("size",12)),
@@ -94,6 +101,7 @@ def pdf2html(p: Payload):
     def build_semantic(pages):
         out = io.StringIO()
         out.write("<article>")
+        out=io.StringIO(); out.write("<article>")
         for p in pages:
             for s in p["spans"]:
                 t=s["text"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
@@ -112,6 +120,12 @@ def pdf2html(p: Payload):
         for p in pages:
             w, h = p["size"]
             out.write(f'<section class="page" style="position:relative;width:100%;padding-top:{h/w*100:.2f}%">')
+        out.write("</article>"); return out.getvalue()
+
+    def build_fidelity(pages):
+        out=io.StringIO(); out.write('<div class="pdf">')
+        for p in pages:
+            w,h=p["size"]; out.write(f'<section class="page" style="position:relative;width:100%;padding-top:{h/w*100:.2f}%">')
             for s in p["spans"]:
                 x0,y0,x1,y1=s["bbox"]
                 style=f'position:absolute;left:{x0/w*100:.3f}%;top:{y0/h*100:.3f}%;width:{(x1-x0)/w*100:.3f}%;height:{(y1-y0)/h*100:.3f}%;color:{s["color"]};font-size:{s["size"]}px'
@@ -120,6 +134,7 @@ def pdf2html(p: Payload):
             out.write("</section>")
         out.write("</div>")
         return out.getvalue()
+        out.write("</div>"); return out.getvalue()
 
     html_sem = build_semantic(pages)
     html_fid = build_fidelity(pages)
