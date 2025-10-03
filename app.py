@@ -40,6 +40,8 @@ def pdf2html(p: Payload):
         if p.pdf_b64:
             pdf_bytes = base64.b64decode(p.pdf_b64)
         elif p.pdf_url:
+            r = requests.get(p.pdf_url, timeout=60)
+            r.raise_for_status()
             r = requests.get(p.pdf_url, timeout=60); r.raise_for_status()
             pdf_bytes = r.content
         else:
@@ -76,6 +78,13 @@ def pdf2html(p: Payload):
                     txt = nfkc(sp.get("text", ""))
                     if not txt:
                         continue
+                    all_text.append(txt)
+                    col = sp.get("color",(0,0,0))
+                    if isinstance(col,(list,tuple)):
+                        r = int(round(col[0] * 255))
+                        g = int(round(col[1] * 255))
+                        b = int(round(col[2] * 255))
+                        color = f"#{r:02X}{g:02X}{b:02X}"
                     txt = nfkc(sp.get("text","")); if not txt: continue
                     all_text.append(txt)
                     col = sp.get("color",(0,0,0))
@@ -90,6 +99,8 @@ def pdf2html(p: Payload):
 
     # 3) Constructions HTML (simple)
     def build_semantic(pages):
+        out = io.StringIO()
+        out.write("<article>")
         out=io.StringIO(); out.write("<article>")
         for p in pages:
             for s in p["spans"]:
@@ -102,6 +113,13 @@ def pdf2html(p: Payload):
                 out.write("</table>")
         out.write("</article>")
         return out.getvalue()
+
+    def build_fidelity(pages):
+        out = io.StringIO()
+        out.write('<div class="pdf">')
+        for p in pages:
+            w, h = p["size"]
+            out.write(f'<section class="page" style="position:relative;width:100%;padding-top:{h/w*100:.2f}%">')
         out.write("</article>"); return out.getvalue()
 
     def build_fidelity(pages):
