@@ -55,11 +55,31 @@ def pdf2html(p: Payload):
     link_count, table_count = 0, 0
     for pg in doc:
         w, h = pg.rect.width, pg.rect.height
+        links = []
         links=[]
         try:
             for lk in pg.get_links() or []:
                 if lk.get("uri") and lk.get("from"):
                     r = lk["from"]
+                    links.append({"href": lk["uri"], "bbox": [r.x0, r.y0, r.x1, r.y1]})
+        except Exception:
+            pass
+        link_count += len(links)
+
+        tables = []
+        try:
+            tf = pg.find_tables()
+            for table in tf.tables:
+                tables.append(table.extract())
+        except Exception:
+            pass
+        table_count += len(tables)
+
+        spans = []
+        d = pg.get_text("dict")
+        for b in d.get("blocks", []):
+            if b.get("type", 0) != 0:
+                continue
                     links.append({"href": lk["uri"], "bbox":[r.x0,r.y0,r.x1,r.y1]})
         except: pass
         link_count += len(links)
@@ -79,12 +99,25 @@ def pdf2html(p: Payload):
                     if not txt:
                         continue
                     all_text.append(txt)
+                    col = sp.get("color", (0, 0, 0))
+                    if isinstance(col, (list, tuple)):
                     col = sp.get("color",(0,0,0))
                     if isinstance(col,(list,tuple)):
                         r = int(round(col[0] * 255))
                         g = int(round(col[1] * 255))
                         b = int(round(col[2] * 255))
                         color = f"#{r:02X}{g:02X}{b:02X}"
+                    else:
+                        color = "#000000"
+                    x0, y0, x1, y1 = sp.get("bbox", [0, 0, 0, 0])
+                    spans.append({
+                        "text": txt,
+                        "font": sp.get("font", ""),
+                        "size": float(sp.get("size", 12)),
+                        "color": color,
+                        "bbox": [x0, y0, x1, y1],
+                    })
+        pages.append({"size": [w, h], "spans": spans, "links": links, "tables": tables})
                     txt = nfkc(sp.get("text","")); if not txt: continue
                     all_text.append(txt)
                     col = sp.get("color",(0,0,0))
@@ -147,6 +180,13 @@ def pdf2html(p: Payload):
     # 5) ZIP optionnel
     zip_b64=None
     try:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("semantic.html", html_sem)
+            z.writestr("fidelity.html", html_fid)
+        zip_b64 = base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        pass
         buf=io.BytesIO()
         with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as z:
             z.writestr("semantic.html",html_sem)
