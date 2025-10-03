@@ -42,6 +42,7 @@ def pdf2html(p: Payload):
         elif p.pdf_url:
             r = requests.get(p.pdf_url, timeout=60)
             r.raise_for_status()
+            r = requests.get(p.pdf_url, timeout=60); r.raise_for_status()
             pdf_bytes = r.content
         else:
             raise HTTPException(400, "Provide 'pdf_b64' or 'pdf_url'")
@@ -55,6 +56,7 @@ def pdf2html(p: Payload):
     for pg in doc:
         w, h = pg.rect.width, pg.rect.height
         links = []
+        links=[]
         try:
             for lk in pg.get_links() or []:
                 if lk.get("uri") and lk.get("from"):
@@ -78,6 +80,19 @@ def pdf2html(p: Payload):
         for b in d.get("blocks", []):
             if b.get("type", 0) != 0:
                 continue
+                    links.append({"href": lk["uri"], "bbox":[r.x0,r.y0,r.x1,r.y1]})
+        except: pass
+        link_count += len(links)
+        tables=[]
+        try:
+            tf = pg.find_tables()
+            for t in tf.tables: tables.append(t.extract())
+        except: pass
+        table_count += len(tables)
+        spans=[]
+        d = pg.get_text("dict")
+        for b in d.get("blocks", []):
+            if b.get("type",0)!=0: continue
             for ln in b.get("lines", []):
                 for sp in ln.get("spans", []):
                     txt = nfkc(sp.get("text", ""))
@@ -86,6 +101,8 @@ def pdf2html(p: Payload):
                     all_text.append(txt)
                     col = sp.get("color", (0, 0, 0))
                     if isinstance(col, (list, tuple)):
+                    col = sp.get("color",(0,0,0))
+                    if isinstance(col,(list,tuple)):
                         r = int(round(col[0] * 255))
                         g = int(round(col[1] * 255))
                         b = int(round(col[2] * 255))
@@ -101,11 +118,23 @@ def pdf2html(p: Payload):
                         "bbox": [x0, y0, x1, y1],
                     })
         pages.append({"size": [w, h], "spans": spans, "links": links, "tables": tables})
+                    txt = nfkc(sp.get("text","")); if not txt: continue
+                    all_text.append(txt)
+                    col = sp.get("color",(0,0,0))
+                    if isinstance(col,(list,tuple)):
+                        r=int(round(col[0]*255)); g=int(round(col[1]*255)); b=int(round(col[2]*255))
+                        color=f"#{r:02X}{g:02X}{b:02X}"
+                    else: color="#000000"
+                    x0,y0,x1,y1 = sp.get("bbox",[0,0,0,0])
+                    spans.append({"text":txt,"font":sp.get("font",""),"size":float(sp.get("size",12)),
+                                  "color":color,"bbox":[x0,y0,x1,y1]})
+        pages.append({"size":[w,h],"spans":spans,"links":links,"tables":tables})
 
     # 3) Constructions HTML (simple)
     def build_semantic(pages):
         out = io.StringIO()
         out.write("<article>")
+        out=io.StringIO(); out.write("<article>")
         for p in pages:
             for s in p["spans"]:
                 t=s["text"].replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
@@ -124,6 +153,12 @@ def pdf2html(p: Payload):
         for p in pages:
             w, h = p["size"]
             out.write(f'<section class="page" style="position:relative;width:100%;padding-top:{h/w*100:.2f}%">')
+        out.write("</article>"); return out.getvalue()
+
+    def build_fidelity(pages):
+        out=io.StringIO(); out.write('<div class="pdf">')
+        for p in pages:
+            w,h=p["size"]; out.write(f'<section class="page" style="position:relative;width:100%;padding-top:{h/w*100:.2f}%">')
             for s in p["spans"]:
                 x0,y0,x1,y1=s["bbox"]
                 style=f'position:absolute;left:{x0/w*100:.3f}%;top:{y0/h*100:.3f}%;width:{(x1-x0)/w*100:.3f}%;height:{(y1-y0)/h*100:.3f}%;color:{s["color"]};font-size:{s["size"]}px'
@@ -132,6 +167,7 @@ def pdf2html(p: Payload):
             out.write("</section>")
         out.write("</div>")
         return out.getvalue()
+        out.write("</div>"); return out.getvalue()
 
     html_sem = build_semantic(pages)
     html_fid = build_fidelity(pages)
@@ -151,6 +187,12 @@ def pdf2html(p: Payload):
         zip_b64 = base64.b64encode(buf.getvalue()).decode()
     except Exception:
         pass
+        buf=io.BytesIO()
+        with zipfile.ZipFile(buf,"w",zipfile.ZIP_DEFLATED) as z:
+            z.writestr("semantic.html",html_sem)
+            z.writestr("fidelity.html",html_fid)
+        zip_b64 = base64.b64encode(buf.getvalue()).decode()
+    except: pass
 
     return {
         "html_semantic": html_sem,
