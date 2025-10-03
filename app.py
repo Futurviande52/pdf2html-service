@@ -76,6 +76,7 @@ def pdf2html(p: Payload):
                     txt = nfkc(sp.get("text", ""))
                     if not txt:
                         continue
+                    txt = nfkc(sp.get("text","")); if not txt: continue
                     all_text.append(txt)
                     col = sp.get("color",(0,0,0))
                     if isinstance(col,(list,tuple)):
@@ -101,6 +102,7 @@ def pdf2html(p: Payload):
                 out.write("</table>")
         out.write("</article>")
         return out.getvalue()
+        out.write("</article>"); return out.getvalue()
 
     def build_fidelity(pages):
         out=io.StringIO(); out.write('<div class="pdf">')
@@ -114,6 +116,7 @@ def pdf2html(p: Payload):
             out.write("</section>")
         out.write("</div>")
         return out.getvalue()
+        out.write("</div>"); return out.getvalue()
 
     html_sem = build_semantic(pages)
     html_fid = build_fidelity(pages)
