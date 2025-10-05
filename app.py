@@ -44,4 +44,16 @@ def pdf2html(payload: Pdf2HtmlIn):
         "request_id": payload.request_id,
         "html_semantic": "\n".join(html_fragments),
         "metrics": {"pages": i if 'i' in locals() else 0},
-    }
+    } from fastapi import Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+import logging
+
+logger = logging.getLogger("uvicorn.error")
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = (await request.body()).decode("utf-8", errors="ignore")
+    logger.error("422 payload=%s errors=%s", body[:1000], exc.errors())
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
