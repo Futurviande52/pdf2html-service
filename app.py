@@ -1,8 +1,13 @@
 # app.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, HttpUrl
 import base64, requests, html as html_mod
 import fitz  # PyMuPDF
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI()
 
@@ -10,7 +15,7 @@ class Pdf2HtmlIn(BaseModel):
     request_id: str | None = None
     filename: str | None = None
     pdf_b64: str | None = None
-    pdf_url: HttpUrl | None = None
+    pdf_url: HttpUrl | None = None   # <= URL http(s) valide sinon 422
 
 @app.get("/health")
 def health():
@@ -33,8 +38,10 @@ def pdf2html(payload: Pdf2HtmlIn):
     blob = _load_pdf_bytes(payload)
     doc = fitz.open(stream=blob, filetype="pdf")
     html_fragments = ["<html><head><meta charset='utf-8'></head><body>"]
+    pages = 0
     for i, page in enumerate(doc, start=1):
-        text = page.get_text("text")
+        pages = i
+        text = page.get_text("text")  # texte brut; pas d'invention
         html_fragments.append(
             f"<section data-page='{i}'><pre>{html_mod.escape(text)}</pre></section>"
         )
@@ -43,17 +50,12 @@ def pdf2html(payload: Pdf2HtmlIn):
     return {
         "request_id": payload.request_id,
         "html_semantic": "\n".join(html_fragments),
-        "metrics": {"pages": i if 'i' in locals() else 0},
-    } from fastapi import Request
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
-import logging
+        "metrics": {"pages": pages},
+    }
 
-logger = logging.getLogger("uvicorn.error")
-
+# Handler propre pour voir *pourquoi* tu prends un 422
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     body = (await request.body()).decode("utf-8", errors="ignore")
-    logger.error("422 payload=%s errors=%s", body[:1000], exc.errors())
+    logger.error("422 payload=%s errors=%s", body[:1000], exc.errors())  # log côté serveur
     return JSONResponse(status_code=422, content={"detail": exc.errors()})
-
